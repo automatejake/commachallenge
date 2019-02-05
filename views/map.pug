@@ -1,0 +1,157 @@
+extends layout.pug
+block content
+    #map
+    #infoChart
+        h1#title Information:
+        p#calcspeed Calculated Avg Speed:
+        //distance one is calculated between coordinates
+        p#dist Calculated Distance:
+        p#chffrspeed Chffr Avg Speed:
+        //distance two is calculated by comma.ai
+        p#dist2 Chffr Distance:
+        p#high Highest Speed:
+        p#low Lowest Speed:
+        p#time Total Time:
+        p#meter Jacob Coolness:
+        
+
+
+    script(type='text/javascript').
+        
+        //tiling system is open street map
+        var map = L.map('map').setView([#{lat},#{lng}], 9, true);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        
+
+        //mouse leave event does not always trigger, so lines need to be removed
+        //when the cursor moves over the next point
+        var calcSpeed = 0;
+        var chffrSpeed = 0;
+        var count = 0;
+        var high = 0;
+        var low = 9999;
+        var time = 0;
+        var calcDistance = 0;
+        var chffrDistance = 0;
+        var previousPolyline;
+        var preservePoint;
+        var polyline;
+        var result2;
+
+        //gets the starting point data
+        $.getJSON('/trips',function(result){ 
+            $.each(result.coords, function(i, tripPoint){
+                let circle = L.circle([tripPoint[1], tripPoint[2]], {
+                    color: 'blue',
+                    fillColor: 'blue',
+                    weight: 5,
+                    fillOpacity: .5,
+                    radius: 100
+                
+                }).addTo(map).on({
+                    'mouseover': function (e) {
+                        $.getJSON('/trip/' + tripPoint[0], function(r){
+                            calcSpeed = 0;
+                            chffrSpeed = 0;
+                            count = 0;
+                            high = 0;
+                            low = 9999;
+                            time = 0;
+                            calcDistance = 0;
+                            chffrDistance = 0;
+
+                            if(previousPolyline != null){
+                                previousPolyline.remove()
+                                preservePoint.addTo(map)
+                            }
+                            
+
+                            result2 = r;
+                            
+                            var pointList = [];
+                            $.each(result2.coords,function(j, pointInfo){
+                                pointList[j] = new L.LatLng(pointInfo.lat, pointInfo.lng)
+                                
+
+                                if(pointInfo.speed > high){
+                                    high = pointInfo.speed;
+                                }
+                                if(pointInfo.speed < low && pointInfo.speed > 0.009){
+                                    low = pointInfo.speed;
+                                }
+                        
+                                //calculates distance in meters accounting for sine and cosine
+                                if(j > 0)
+                                    calcDistance += pointList[j-1].distanceTo(pointList[j])
+                                
+                                chffrSpeed += pointInfo.speed;
+                                chffrDistance += pointInfo.dist;
+                                
+                                //comma calculated distance
+                                dist2 += result2.coords[j].dist;
+                                
+                                count++;
+                            })
+                            
+
+
+
+                            polyline = new L.Polyline(pointList, {
+                                color: 'red',
+                                fillColor: 'red',
+                                weight: 3.5,
+                                opacity: 1,
+                                smoothFactor: 5
+                            });
+                            
+
+                            polyline.addTo(map);
+                            previousPolyline = polyline;
+                            preservePoint = circle;
+
+                            chffrDistance = chffrDistance/1609.344;
+                            calcDistance = calcDistance/1609.344; 
+                            
+
+
+                            let start = new Date(result2.start_time)
+                            let end = new Date(result2.end_time)
+                            time = new Date(end.getTime() - start.getTime())
+                            
+                            //console.log(start)
+                            //console.log(end)
+
+                            //time in seconds
+                            time = time/1000
+
+                            calcSpeed = calcDistance/(time/(60*60))
+
+                            let hours = Math.trunc(time/(60*60))
+                            time -= hours*60*60
+                            let minutes = Math.trunc(time/60)
+                            time -= minutes*60
+                            let seconds = Math.trunc(time)
+                            
+                            time = hours + ':' + minutes + ':' + seconds
+                            
+                            $('#calcspeed').text('Calculated Avg Speed: ' + Math.round(100 * (calcSpeed))/100 + ' mi/hr');
+                            $('#dist').text('Calculated Distance: ' + Math.round(100 * calcDistance)/100 + ' miles');
+                            $('#chffrspeed').text('Chffr Avg Speed: ' + Math.round(100 * (chffrSpeed/count))/100 + ' mi/hr');
+                            $('#dist2').text('Chffr Distance: ' + Math.round(100 * chffrDistance)/100 + ' miles');
+                            $('#high').text('Highest Speed: ' + Math.round(100 * high)/100 + ' mi/hr');
+                            $('#low').text('Lowest Speed: ' + Math.round(100 * low)/100  + ' mi/hr');
+                            $('#time').text('Total Time: ' + time);
+                            $('#meter').text('Jacob Coolness:  > range');
+                        })
+                    },
+                    'click': function(e){
+                        
+                        
+                    }   
+                })
+
+            });
+        });
